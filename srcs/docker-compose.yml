@@ -1,0 +1,67 @@
+version: "3.7"
+
+services:
+    wordpress:
+        build: ./requirements/wordpress/ # Dockerfile의 위치, 이 경로에 있는 Dockerfile에 따라 이미지를 빌드
+        image: wordpress:inception # 빌드된 이미지에 태그할 이름
+        container_name: wordpress # 생성될 컨테이너의 이름
+        env_file: .env # 환경 변수를 저장한 파일의 위치, 이 파일에 정의된 환경 변수들은 컨테이너에서 사용
+        networks: # 이 서비스가 연결될 네트워크를 명시
+            - nginx-wordpress
+            - mariadb-wordpress
+        restart: on-failure # 컨테이너가 실패했을 때 재시작 정책, 실패 시에만 재시작
+        volumes:  # 볼륨을 마운트, 호스트와 컨테이너 간의 데이터 공유를 위해 사용됨.
+            - wordpress-data:/var/www/html/ 
+        depends_on: # 이 서비스가 시작되기 전에 시작되어야 할 다른 서비스를 명시.
+            - mariadb
+
+    mariadb:
+        build: ./requirements/mariadb/
+        image: mariadb:inception
+        container_name: mariadb
+        env_file: .env
+        networks:
+            - mariadb-wordpress
+        restart: on-failure
+        volumes:
+            - mariadb-data:/var/lib/mysql/
+
+    nginx:
+        build: ./requirements/nginx/
+        image: nginx:inception
+        container_name: nginx
+        env_file: .env
+        networks:
+            - nginx-wordpress
+        ports: # 호스트와 컨테이너 간의 포트 매핑을 정의합니다. 외부에서 컨테이너의 443번 포트에 접근할 수 있도록 합니다.
+            - "443:443"
+        restart: on-failure
+        volumes:
+            - wordpress-data:/var/www/html/
+        depends_on:
+            - wordpress
+
+
+
+volumes: 
+  mariadb-data: # MariaDB 데이터를 저장할 볼륨
+    driver: local # 볼륨의 드라이버를 지정합니다. 여기서는 로컬 파일 시스템을 사용합니다.
+    driver_opts: # 드라이버에 전달할 옵션을 정의합니다.
+      type: 'none' # 볼륨의 타입을 지정합니다.
+      o: 'bind' # 볼륨을 바인드 마운트 방식으로 사용합니다.
+      device: ${VOLUME_PATH}/mariadb-data # 실제 데이터가 저장될 호스트 시스템의 경로입니다.
+
+  wordpress-data:  # WordPress 데이터를 저장할 볼륨
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: ${VOLUME_PATH}/wordpress-data
+
+networks:
+    nginx-wordpress: # nginx와 wordpress 서비스를 연결하는 네트워크
+        name: nginx-wordpress # 네트워크의 이름을 지정합니다.
+        driver: bridge # 네트워크 드라이버로 bridge를 사용합니다.
+    mariadb-wordpress: # mariadb와 wordpress 서비스를 연결하는 네트워크
+        name: mariadb-wordpress
+        driver: bridge
